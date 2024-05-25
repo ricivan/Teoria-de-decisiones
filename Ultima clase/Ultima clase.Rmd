@@ -1,0 +1,358 @@
+---
+title: "Ultima clase"
+author: "Ricardo Terrones"
+date: "2024-05-25"
+output: html_document
+toc: true
+toc_depth: 1
+theme: cerule
+
+---
+<style>
+body { text-align: justify}</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(tidyverse)
+library(discrtr) # A companion package for the book Introduction to Discrete Choice Analysis with `R`
+library(dplyr) # A Grammar of Data Manipulation
+library(ggplot2) # Create Elegant Data Visualisations Using the Grammar of Graphics
+library(mlogit) # Multinomial Logit Models
+library(readr) # Read Rectangular Text Data
+library(gplots) # Various R Programming Tools for Plotting Data
+library(ggmosaic) # Mosaic Plots in the 'ggplot2' Framework
+library(treemapify)
+library(ggridges)
+library(ggalluvial)
+library(evd)
+library(htmlwidgets) # HTML Widgets for R
+library(kableExtra) # Construct Complex Table with kable and Pipe Syntax
+library(plotly) # Create interactive web graphics
+library(tidyr) # Tidy messy data
+library(webshot2) # Take screenshots of web pages
+# Para poder estimar el modelo de clases latentes, es necesario instalar la versión de desarrollo, 
+# pero antes hay que instalr el package remotes
+#install.packages("remotes")
+#remotes::install_github("mauricio1986/gmnl")
+library(gmnl) # Multinomial Logit Models with Random Parameters
+library(evd)
+library(gridExtra)
+```
+
+
+Tareas Teoría de Decisiones:
+
+
+1. Ejercicios  3, 4 y 5 del Capítulo 2.
+
+2. Ejercicios Capítulo 5.
+
+3. Ejemplos realizados el 23 de mayo.
+
+Subir los archivos a su cuenta de GitHub a más tardar el sábado 25 de mayo.
+
+
+# Conjunto de datos ModeCanada
+
+Trabajaremos con los datos *ModeCanada* del package *mlogit* el cual consiste de las opciones de transporte entre Montreal y Toronto.   Está en formato por longitud con las siguientes variables: 
+
+
+* case: the individual index,
+
+* alt: the alternative, one of train, car, bus and air,
+
+* choice: one if the mode is chosen, zero otherwise,
+
+* cost: monetary cost,
+
+* ivt: in vehicule time,
+
+* ovt: out vehicule time,
+
+* frequency: frequency,
+
+* income: income,
+
+* urban: urban,
+
+* noalt: the number of alternatives available.
+
+```{r}
+data("ModeCanada", package = "mlogit")
+glimpse(ModeCanada)
+```
+
+Cambiamos el tipo de algunas variables:
+
+```{r}
+ModeCanada$dist <- as.numeric(ModeCanada$dist)
+ModeCanada$income <- as.numeric(ModeCanada$income)
+```
+
+
+
+Observamos que no todas las personas tienen todas las alternativas disponibles,  se filtra un subconjunto con disponibilidad completa:
+
+
+```{r}
+MC <- mlogit.data(ModeCanada |> 
+filter(noalt == 4),
+choice = "choice",
+shape = "long",
+alt.levels = c("air",
+"train",
+"bus",
+"car"))
+```
+
+```{r}
+ModeCanadafilter <- 
+  ModeCanada |> filter(noalt == 4)
+```
+
+
+```{r}
+
+ggplot(ModeCanadafilter |> filter(choice==1))+
+  
+  geom_bar(aes(alt, fill=alt),color="black", show.legend = FALSE)+
+  
+  theme_bw()
+```
+```{r}
+ggplot(ModeCanadafilter)+
+  
+  geom_boxplot(aes(alt, cost, color=alt), show.legend = FALSE)+
+  
+  theme_bw()
+```
+```{r}
+ggplot(ModeCanadafilter)+
+  
+  geom_boxplot(aes(alt, ovt, color=alt), show.legend = FALSE)+
+  
+  theme_bw()
+```
+
+```{r}
+ggplot(ModeCanadafilter)+
+  geom_boxplot(aes(alt, ivt, color="alt"
+                   ), show.legend = FALSE )+
+  theme_classic()
+```
+
+
+## Modelo logit simple considerando el costo 
+```{r}
+ml2 <- mlogit(choice ~ 
+                cost+ivt+ovt, MC)
+summary(ml2)
+```
+## Modelo logit multinomial, considerando dist como atributo del decisor 
+
+```{r}
+ml3 <- mlogit(choice ~ 
+                cost+ivt+ovt|dist, MC)
+summary(ml3)
+```
+
+## Modelo logit multinomial, considerando dist como atributo del decisor y coeficiente especificos para costo **
+
+```{r}
+ml4 <- mlogit(choice ~ 
+                ivt+ovt|0|cost, MC)
+summary(ml4)
+```
+
+**Modelo anidado: Aire y terrestre**
+
+```{r}
+nl1 <- mlogit(choice ~ cost+ivt+ovt, MC, nests = list(room=c('air', 'car'), set2 = c('train', 'bus')), steptol=1e-12)
+
+summary(nl1)
+```
+
+```{r}
+#lc2 <- gmnl(choice ~ cost| 0 | 0 | 0 | 1, data = MC, model = 'lc', Q = 2, panel = TRUE, method = "MC")
+```
+
+Podemos notar que para que se seleccione una opcion las personas buscan la opcion con un menor tiempo de espera, es por eso que a pesar de ser un poco mas caro, la opcion de aire es la mejor, pero aun asi la opcion de carro es la mas elegida. 
+
+# Conjunto de datos TravelMode
+
+Consideremos los datos *TravelMode* del package *AER* el cual consiste de las opciones de transporte entre Sidney y Melbourne.   Está en formato por longitud con las siguientes variables: 
+
+* individual: Factor indicating individual with levels 1 to 210.
+
+* mode: Factor indicating travel mode with levels "car", "air", "train", or "bus".
+
+* choice: Factor indicating choice with levels "no" and "yes".
+
+* wait: Terminal waiting time, 0 for car.
+
+* vcost: Vehicle cost component.
+
+* travel: Travel time in the vehicle.
+
+* gcost: Generalized cost measure.
+
+* income: Household income.
+
+* size: Party size.
+
+```{r}
+data("TravelMode", package = "AER")
+glimpse(TravelMode)
+```
+
+
+Cambiamos la clase del conjunto de datos:
+
+```{r}
+TM <- mlogit.data(TravelMode,
+choice = "choice",
+shape = "long",
+alt.levels = c("air",
+"train",
+"bus",
+"car"))
+```
+
+## Modelo de clase latentes (Q=2), considerando costo
+```{r}
+#lc1 <- gmnl(choice ~ vcost| 0 | 0 | 0 | 1, data = TM, model = 'lc', Q = 2, panel = FALSE,  method = "bhhh")
+#summary(lc1)
+```
+
+
+**Llevar acabo modelos logit considerando atributos de las alternativas y decisores.**
+
+```{r}
+data("TravelMode", package = "mlogit")
+glimpse(TravelMode)
+```
+# Graficas
+
+```{r}
+ggplot(TravelMode |> filter(choice=="yes"))+
+  geom_bar(aes(mode, fill=mode), show.legend = FALSE)+
+  theme_bw()
+```
+
+```{r}
+ggplot(TravelMode |> filter(choice=="yes"))+
+  geom_boxplot(aes(mode,wait, fill=mode), show.legend = FALSE, color="black")+
+  theme_bw()
+
+#con variable "wait"
+```
+
+
+```{r}
+ggplot(TravelMode |> filter(choice=="yes"))+
+  geom_boxplot(aes(mode,travel, fill=mode),
+               show.legend = FALSE, color="black")+
+  theme_bw()
+
+#con variable "travel"
+```
+## Modelo anidado 
+
+```{r}
+nl1 <- mlogit(choice ~ vcost+travel+wait, TM, nests = list(set1=c('bus', 'train'), set2 = c( 'air', 'car')), steptol=1e-12)
+
+summary(nl1)
+```
+
+
+## Modelo logit considerando el costo 
+
+```{r}
+ml1 <- mlogit(choice ~ 
+                vcost+travel+gcost, TM)
+summary(ml1)
+```
+## Modelo logit multinomial, considerando travel como atributo del decisor 
+
+```{r}
+ml2 <- mlogit(choice ~ 
+                vcost+wait+gcost|travel, TM)
+summary(ml2)
+```
+## Modelo logit multinomial, considerando dist como atributo del decisor y coeficiente especificos para costo **
+```{r}
+ml3 <- mlogit(choice ~ 
+                gcost+wait|vcost, TM)
+summary(ml3)
+```
+
+#Agregar logit mixto. Elige cualquiera de los mixtos e interpreta la gráfica (notas capitulo 10)
+
+```{r}
+# Retrieve the estimated parameters
+mu <- coef(TM)['wait']
+sigma <- coef(TM)['sd.wait']
+
+# Create a data frame for plotting
+df <- data.frame(x =seq(from = -0.6, to = 0.2, by = 0.005)) %>%
+  
+# Draw from the normal distribution for x given the mean and sd
+      mutate(normal = dnorm(x, mean = 0.5, sd = 1))
+
+# Same, but only positive values of x
+df_p <- data.frame(x = seq(from = 0, to = 0.2, by = 0.005)) %>%
+        mutate(normal = dnorm(x, mean = 05, sd = 1))
+
+```
+
+## Gráfica
+
+```{r}
+# Plot
+ggplot() +
+  
+# Plot the distribution
+   geom_area(data = df, aes(x = x, y = normal), fill = "pink", alpha = 0.5) +
+  
+# Plot the distribution for positive values of x only
+   geom_area(data = df_p, aes(x = x, y = normal), fill = "blue", alpha = 0.5) +
+  
+   geom_hline(yintercept = 0) + # Add y axis
+   geom_vline(xintercept = 0) + # Add x axis
+   ylab("f(x)") + # Label the y axis
+  
+   xlab(expression(beta[n][wait])) + # Label the x axis
+   ggtitle("Non-conditional Distribution of the Wait Parameter")
+```
+El gráfico ilustra la variabilidad en la respuesta al tiempo de espera dentro de la población. Aunque la mayoría parece mostrar una aversión al tiempo de espera, algunos individuos demuestran una menor aversión o incluso una preferencia por este período. Esto sugiere que la percepción del tiempo de espera es subjetiva y que algunas personas pueden encontrar aspectos positivos en esta experiencia, como se observa en la distribución que incluye valores positivos para el coeficiente.
+
+```{r}
+# Define parameters for the distribution of willingness to pay
+mu <- coef(TM)['wait'] / coef(TM)['vcost']
+
+sigma <- sqrt(coef(TM)['sd.wait']^2/ coef(TM)['vcost']^2)
+
+# Create a data frame for plotting
+df <- data.frame(x =seq(from = -10, to = 30, by = 0.1)) %>%
+mutate(normal = dnorm(x, mean = 0.5, sd = 1))
+```
+
+```{r}
+# Plot
+ggplot() +
+geom_area(data = df, aes(x, normal), fill = "BLUE", alpha = 0.5) +
+  
+# geom_area(data = df_p, aes(x, normal), fill = "orange", alpha = 0.5) +
+#ylim(c(0, 1/(2 * L) + 0.2 * 1/(2 * L))) + # Set the limits of the y axis
+  
+geom_hline(yintercept = 0) + # Add y axis
+geom_vline(xintercept = 0) + # Add x axis
+ylab("f(x)") + # Label the y axis
+xlab(expression(WTP[n][wait])) + # Label the x axis
+ggtitle("UNon-conditional Distribution of the Wait Parameter")
+```
+de forma general las personas prefieron que el tiempo y espera de su traslado sea rapido, es por eso que en las opciones de bus y tren son las que han salido con los parametros mas bajos 
+
+```
+
